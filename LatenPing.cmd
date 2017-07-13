@@ -72,7 +72,7 @@ REM Initialization code for reading keyboard input
 	if /I "%~1" == "input" goto keyboardinputthread
 
 	:: Title initialization and communication pathway between i/o
-	title NK=0-
+	title IN=0-
 
 	:: Releases keyboard input to a separate thread
 	start /b "" cmd /c "%~0" input
@@ -144,6 +144,9 @@ REM Values used for basic functionality
 	:: PAUSENOPROMPT - paused without a display message
 	set PROGRAMSTATE=RUN
 
+	:: Used for allowing basic text animations
+	set /A "FR = 0"
+
 	:: Holds the number of seconds to wait after displaying a message to continue
 	set WAITPROMPTTIME=5
 
@@ -181,13 +184,13 @@ goto eventloop
 		:: Find the token containing the key pressed
 		for /F "tokens=9* delims=," %%I in ('tasklist /v /fi "pid eq %MY_PID%" /fo csv /nH') do (
 			:: Search for the relevant string from the input thread
-			echo %%I | findstr /c:"NK=" > nul
+			echo %%I | findstr /c:"IN=" > nul
 
 			if errorlevel 1 (
-				echo %%J | findstr /c:"NK=" > nul
+				echo %%J | findstr /c:"IN=" > nul
 
 				if errorlevel 1 (
-					echo %%K | findstr /c:"NK=" > nul
+					echo %%K | findstr /c:"IN=" > nul
 
 					if errorlevel 1 (
 						echo This is not the token you are looking for > nul
@@ -223,7 +226,47 @@ goto eventloop
 	if "!PROGRAMSTATE!" == "RUN" (
 		:: Code is still initializing (getting command line arguments, first ping, etc.)
 		if "!DISPLAYSTATE!" == "init" (
+			:: Animate the initializing message to let the user know that the program is still working
+			set /A "FR0 = FR % 7"
+			if "!FR0!" == "0" set "DISPLAYMSG=initializing"
+			if "!FR0!" == "1" set "DISPLAYMSG=initializing."
+			if "!FR0!" == "2" set "DISPLAYMSG=initializing.."
+			if "!FR0!" == "3" set "DISPLAYMSG=initializing..."
+			if "!FR0!" == "4" set "DISPLAYMSG=initializing...."
+			if "!FR0!" == "5" set "DISPLAYMSG=initializing....."
+			if "!FR0!" == "6" set "DISPLAYMSG=initializing......"
 
+			set CLEARPREVSCREEN=!TRUE!
+			set ERRORFLAG=!FALSE!
+			set /A "DISPLAYMSG_ROW = 3"
+			set /A "DISPLAYMSG_COL = 2"
+			
+			:: Determines whether or not the first real ping can be made
+			set STARTPING=!TRUE!
+
+			:: Continue mapping arguments
+			set "_arg0=%~1"
+			set "_arg1=%~2"
+
+			if defined _arg0 (
+				if defined _arg1 (
+					:: Change the global variable values based on given arguments
+					call :mapargument "!_arg0!" "!_arg1!"
+
+					:: Shift to the next pair of arguments
+					shift
+					shift
+
+					:: A pair or arguments was found, so there could be more, so avoid first ping
+					set STARTPING=!FALSE!
+				)
+			)
+
+			:: Start the first ping once arguments are finished mapping
+			if "!STARTPING!" == "!TRUE!" (
+				call :pingaddress "!IPADDR!"
+				set "DISPLAYSTATE=menu"
+			)
 		) else (
 			if "!DISPLAYSTATE!" == "menu" (
 
@@ -243,24 +286,35 @@ goto eventloop
 				)
 			)
 		)
+
+		:: Update the display
+		call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
 	) else (
 		if "!PROGRAMSTATE!" == "PAUSEPROMPT" (
 			if "!ERRORFLAG!" == "!TRUE!" (
 				call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
+				set _RETURN=
+
 				echo Press any key to continue...
 			) else (
 				call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
+				set _RETURN=
+
 				echo Press any key to continue...
 			)
 		) else (
 			if "!PROGRAMSTATE!" == "PAUSENOPROMPT" (
 				if "!ERRORFLAG!" == "!TRUE!" (
 					call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
+					set _RETURN=
 				) else (
 					call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
+					set _RETURN=
 				)
 			) else (
 				call :updateuserinterfaceerror "Unexpected PROGRAMSTATE: '!PROGRAMSTATE!' encountered. Exiting program." 2 1 !TRUE! !THENWAITPROMPT!
+				set _RETURN=
+
 				goto END
 			)
 		)
@@ -269,32 +323,10 @@ goto eventloop
 	:: Save the N value for the next loop
 	set /A "N0 = !N1!"
 	
+	:: Update the frame counter for the next iteration
+	set /A "FR += 1"
+
 	goto eventloop
-
-:: Process all given command line arguments
-:maparguments
-	set "_arg0=%~1"
-	set "_arg1=%~2"
-
-	if defined _arg0 (
-		if defined _arg1 (
-			:: Change the global variable values based on given arguments
-			call :mapargument "!_arg0!" "!_arg1!"
-
-			:: Shift to the next pair of arguments
-			shift
-			shift
-
-			goto maparguments
-		)
-	)
-
-	:: Done with the booting process
-	set DISPLAYSTATE=menu
-
-	:: Start the program loop once done mapping all given arguments
-	set _RETURN=
-	goto :EOF
 
 :: Subroutine that handles LatenPing logic if the program is currently running
 :runtestping
@@ -588,6 +620,52 @@ goto eventloop
 	set _RETURN=
 	goto :EOF
 
+:: Handles keyboard input in a separate thread
+:keyboardinputthread
+	:: Container for the key pressed
+	set K=
+
+	:: Xcopy method of acquiring keyboard input. Pauses the current thread until input is received
+	for /F "eol=0 delims=" %%i in ('xcopy /w "%~f0." ?') do set "K=%%i"
+
+	:: Change the title of the program if a key was detected
+	if not "!K:~-1!" == "" (
+		set K=!K:~-1!
+	)
+
+	:: Send special keys with their string name encapsulated in square brackets
+	if "!K!" == "!TAB!" (
+		title IN=!N!-[TAB]
+	) else (
+		if "!K!" == "!BACKSPACE!" (
+			title IN=!N!-[BACKSPACE]
+		) else (
+			if "!K!" == "-" (
+				title IN=!N!-[HYPHEN]
+			) else (
+				if "!K!" == "!LINEFEED!" (
+					title IN=!N!-[LINEFEED]
+				) else (
+					if "!K!" == "!ENTER!" (
+						title IN=!N!-[ENTER]
+					) else (
+						if "!K!" == " " (
+							title IN=!N!-[SPACE]
+						) else (
+							title IN=!N!-!K!
+						)
+					)
+				)
+			)
+		)
+	)
+
+	:: Increment the number that keeps track of num keys detected so far
+	:: Used for differentiating between keypress and keyidle
+	set /A  "N += 1"
+
+	goto keyboardinputthread
+
 :: Calculates the length of the string given as an argument
 :: Arguments: string
 :: Credit https://helloacm.com/get-string-length-using-windows-batch/
@@ -605,52 +683,6 @@ goto eventloop
 		)
 
 	goto :EOF
-
-:: Handles keyboard input in a separate thread
-:keyboardinputthread
-	:: Container for the key pressed
-	set K=
-
-	:: Xcopy method of acquiring keyboard input. Pauses the current thread until input is received
-	for /F "eol=0 delims=" %%i in ('xcopy /w "%~f0." ?') do set "K=%%i"
-
-	:: Change the title of the program if a key was detected
-	if not "!K:~-1!" == "" (
-		set K=!K:~-1!
-	)
-
-	:: Send special keys with their string name encapsulated in square brackets
-	if "!K!" == "!TAB!" (
-		title NK=!N!-[TAB]
-	) else (
-		if "!K!" == "!BACKSPACE!" (
-			title NK=!N!-[BACKSPACE]
-		) else (
-			if "!K!" == "-" (
-				title NK=!N!-[HYPHEN]
-			) else (
-				if "!K!" == "!LINEFEED!" (
-					title NK=!N!-[LINEFEED]
-				) else (
-					if "!K!" == "!ENTER!" (
-						title NK=!N!-[ENTER]
-					) else (
-						if "!K!" == " " (
-							title NK=!N!-[SPACE]
-						) else (
-							title NK=!N!-!K!
-						)
-					)
-				)
-			)
-		)
-	)
-
-	:: Increment the number that keeps track of num keys detected so far
-	:: Used for differentiating between keypress and keyidle
-	set /A  "N += 1"
-
-	goto keyboardinputthread
 
 :: End of the batch file
 endlocal
