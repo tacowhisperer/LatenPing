@@ -111,13 +111,13 @@ REM Values used for basic functionality
 	set DEFAULTHEIGHT=1
 
 	:: Holds the current display state
-	:: <boot>
+	:: <init>
 	::     <menu>
 	::         <exec>
 	::         <opts>
 	::         <help>
 	::         <exit>
-	set DISPLAYSTATE=boot
+	set DISPLAYSTATE=init
 
 	:: Holds the string to be prompted to the screen
 	set DISPLAYMSG=
@@ -128,6 +128,9 @@ REM Values used for basic functionality
 
 	:: Whether or not to display the message as an error
 	set ERRORFLAG=%FALSE%
+
+	:: Whether or not to clear the previous screen on user interface updateuserinterfacehelper
+	set CLEARPREVSCREEN=!TRUE!
 
 	:: Aliases for the commands to execute after calling the updateuserinterface subroutine
 	set THENPAUSEPROMPT=0
@@ -167,27 +170,7 @@ REM Hold the messages related to ping values obtained
 	set LAGSTATEMSG=initializing...
 	set LAGSTATE=init
 
-:: Process all given command line arguments
-:maparguments
-	set "_arg0=%~1"
-	set "_arg1=%~2"
-
-	if defined _arg0 (
-		if defined _arg1 (
-			:: Change the global variable values based on given arguments
-			call :mapargument "!_arg0!" "!_arg1!"
-
-			:: Shift to the next pair of arguments
-			shift
-			shift
-
-			goto maparguments
-		)
-	)
-
-	:: Start the program loop once done mapping all given arguments
-	set _RETURN=
-	goto eventloop
+goto eventloop
 
 :: Event loop subroutine that reads keyboard input, updates console states, etc.
 :eventloop
@@ -233,24 +216,48 @@ REM Hold the messages related to ping values obtained
 
 	REM Start of LatenPing.cmd logic
 
+	:: Check that a key has been pressed. If so, the program is no longer "paused"
+	if "!N0!" neq "!N1" set "PROGRAMSTATE=RUN"
+
 	:: Root of program state
 	if "!PROGRAMSTATE!" == "RUN" (
-		rem DO STUFF
+		:: Code is still initializing (getting command line arguments, first ping, etc.)
+		if "!DISPLAYSTATE!" == "init" (
+
+		) else (
+			if "!DISPLAYSTATE!" == "menu" (
+
+			) else (
+				if "!DISPLAYSTATE" == "exec" (
+
+				) else (
+					if "!DISPLAYSTATE" == "opts" (
+
+					) else (
+						if "!DISPLAYSTATE" == "help" (
+
+						) else (
+							REM The program should now exit
+						)
+					)
+				)
+			)
+		)
 	) else (
 		if "!PROGRAMSTATE!" == "PAUSEPROMPT" (
-			if "!ERRORFLAG!" == "%TRUE%" (
-				call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE! !THENWAITPROMPT!
+			if "!ERRORFLAG!" == "!TRUE!" (
+				call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
 				echo Press any key to continue...
 			) else (
-				call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE! !THENWAITPROMPT!
+				call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
 				echo Press any key to continue...
 			)
 		) else (
 			if "!PROGRAMSTATE!" == "PAUSENOPROMPT" (
-				if "!ERRORFLAG!" == "%TRUE%" (
-					call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE! !THENWAITPROMPT!
+				if "!ERRORFLAG!" == "!TRUE!" (
+					call :updateuserinterfaceerror "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
 				) else (
-					call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE! !THENWAITPROMPT!
+					call :updateuserinterface "!DISPLAYMSG!" !DISPLAYMSG_ROW! !DISPLAYMSG_COL! !TRUE!
 				)
 			) else (
 				call :updateuserinterfaceerror "Unexpected PROGRAMSTATE: '!PROGRAMSTATE!' encountered. Exiting program." 2 1 !TRUE! !THENWAITPROMPT!
@@ -263,6 +270,31 @@ REM Hold the messages related to ping values obtained
 	set /A "N0 = !N1!"
 	
 	goto eventloop
+
+:: Process all given command line arguments
+:maparguments
+	set "_arg0=%~1"
+	set "_arg1=%~2"
+
+	if defined _arg0 (
+		if defined _arg1 (
+			:: Change the global variable values based on given arguments
+			call :mapargument "!_arg0!" "!_arg1!"
+
+			:: Shift to the next pair of arguments
+			shift
+			shift
+
+			goto maparguments
+		)
+	)
+
+	:: Done with the booting process
+	set DISPLAYSTATE=menu
+
+	:: Start the program loop once done mapping all given arguments
+	set _RETURN=
+	goto :EOF
 
 :: Subroutine that handles LatenPing logic if the program is currently running
 :runtestping
@@ -358,18 +390,36 @@ REM Hold the messages related to ping values obtained
 					_RETURN="%~1"
 				)
 			) else (
-				call :updateuserinterfaceerror "IP: '%~1' is not valid. Using IP: '%~2'" 1 1 !TRUE! !THENPAUSEPROMPT!
+				set "DISPLAYMSG=IP: '%~1' is not valid. Using IP: '%~2'"
+				set CLEARPREVSCREEN=!TRUE!
+				set ERRORFLAG=!TRUE!
+				set /A "DISPLAYMSG_ROW = 1"
+				set /A "DISPLAYMSG_COL = 1"
+				set PROGRAMSTATE=PAUSEPROMPT
+
 				set _RETURN="%~2"
 			)
 		) else (
-			call :updateuserinterfaceerror "IP: '%~1' timed out. Using IP: '%~2'" 1 1 !TRUE! !THENPAUSEPROMPT!
+			set "DISPLAYMSG=IP: '%~1' timed out. Using IP: '%~2'"
+			set CLEARPREVSCREEN=!TRUE!
+			set ERRORFLAG=!TRUE!
+			set /A "DISPLAYMSG_ROW = 1"
+			set /A "DISPLAYMSG_COL = 1"
+			set PROGRAMSTATE=PAUSEPROMPT
+
 			set _RETURN="%~2"
 		)
 	)
 
 	:: Handle the case where an unknown response is given
 	if not defined _RETURN (
-		call :updateuserinterfaceerror "Unknown response from IP: '%~1'. Using '%~2'" 1 1 !TRUE! !THENPAUSEPROMPT!
+		set "DISPLAYMSG=Unknown response from IP: '%~1'. Using '%~2'"
+		set CLEARPREVSCREEN=!TRUE!
+		set ERRORFLAG=!TRUE!
+		set /A "DISPLAYMSG_ROW = 1"
+		set /A "DISPLAYMSG_COL = 1"
+		set PROGRAMSTATE=PAUSEPROMPT
+
 		set _RETURN="%~2"
 	)
 
@@ -385,6 +435,13 @@ REM Hold the messages related to ping values obtained
 	for /F "delims=0123456789" %%i in ("%~1") do set _sanitycontainer=%%i
 
 	if defined _sanitycontainer (
+		set "DISPLAYMSG=Argument '%~1' is not a valid number. Using '%~2' as the default value."
+		set CLEARPREVSCREEN=!TRUE!
+		set ERRORFLAG=!TRUE!
+		set /A "DISPLAYMSG_ROW = 1"
+		set /A "DISPLAYMSG_COL = 1"
+		set PROGRAMSTATE=PAUSEPROMPT
+
 		set _RETURN="%~2"
 	) else (
 		set _RETURN="%~1"
@@ -407,7 +464,7 @@ REM Hold the messages related to ping values obtained
 	set /A "_column = %~3 + 1"
 
 	:: Clear the screen if the flag is set
-	if "%~4" == "%TRUE%" cls
+	if "%~4" == "!TRUE!" cls
 
 	:: Move the cursor if row and column are defined
 	if defined _row (
@@ -488,19 +545,15 @@ REM Hold the messages related to ping values obtained
 				) else (
 					if !_actionafterdisplay! == "%THENWAITNOPROMPT!" (
 						timeout /t %WAITPROMPTTIME% /nobreak > nul
-					) else (
-						call :updateuserinterfaceerror "Invalid action after display: '!_actionafterdisplay!'" 1 1 %TRUE% %THENPAUSEPROMPT%
-
-						:: Terminate the program because an impossible error occurred
-						goto :END
 					)
+
+					:: Treat any other command as "do nothing," which does not interrupt the program
 				)
 			)
 		)
-	) else (
-		REM Default to pausing with prompt if no action is specified
-		pause
 	)
+
+	:: Default to doing nothing if no action is specified
 
 	set _RETURN=
 	goto :EOF
