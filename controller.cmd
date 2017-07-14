@@ -27,8 +27,6 @@ REM Initialization code for keyboard input
 	:: Credit - http://www.dostips.com/forum/viewtopic.php?t=2124
 	for /F %%a in ('"prompt $_&for %%b in (1) do rem"') do set "LINEFEED=%%a"
 
-	REM Bookkeeping variables
-
 	:: Used for easy identification of this batch file's PID
 	set "SELF_TITLE=Session:%RANDOM%1337"
 	title %SELF_TITLE%
@@ -49,7 +47,49 @@ REM Initialization code for keyboard input
 	:: Releases keyboard input to a separate thread
 	start /b "" cmd /c "%~0" input
 
-	goto :EOF
+
+REM Key extraction code
+:eventloop
+	set TOKENFOUND=
+	set K1=
+
+	:: Find the token containing the key pressed
+	for /F "tokens=9* delims=," %%I in ('tasklist /v /fi "pid eq %MY_PID%" /fo csv /nH') do (
+		:: Search for the relevant string from the input thread
+		echo %%I | findstr /c:"IN=" > nul
+
+		if errorlevel 1 (
+			echo %%J | findstr /c:"IN=" > nul
+
+			if errorlevel 1 (
+				echo %%K | findstr /c:"IN=" > nul
+
+				if errorlevel 1 (
+					echo This is not the token you are looking for > nul
+				) else (
+					set "TOKENFOUND=%%K"
+					set TOKENFOUND=!TOKENFOUND:"=!
+				)
+			) else (
+				set "TOKENFOUND=%%J"
+				set TOKENFOUND=!TOKENFOUND:"=!
+			)
+		) else (
+			set "TOKENFOUND=%%I"
+			set TOKENFOUND=!TOKENFOUND:"=!
+		)
+	)
+
+	:: Split the main token into the more usable N1 and K1 variables
+	for /F "tokens=1,2 delims=-" %%I in ("!TOKENFOUND!") do (
+		:: Set the new N value
+		set /A "N1 = %%I"
+
+		:: Set the new key value
+		set "K1=%%J"
+	)
+
+	goto eventloop
 
 REM Handles keyboard input in a separate thread
 :keyboardinputthread
