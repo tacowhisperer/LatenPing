@@ -16,8 +16,8 @@ REM Function return variable
 
 REM Hold the options that are read by the updateuserinterface function 
 	:: Padding values to add to the top and bottom of messages displayed.
-	set /A "PADDING_LR = 3"
-	set /A "PADDING_TB = 1"
+	set /A "PADDING_LR = 0"
+	set /A "PADDING_TB = 0"
 
 	:: Newline character for multiline variable
 	set NL=^
@@ -31,19 +31,8 @@ REM Hold the options that are read by the updateuserinterface function
 	set "MAGENTA=[1;35m"
 	set "_COLOR=[0m"
 
-:loop
-call :updateuserinterface "%GREEN%Hello!%_COLOR%" "\n" "%YELLOW%This is the sample output. How does it look?%_COLOR%" "%RED%Hopefully ok.%_COLOR%"
-pause > nul
-
-call :updateuserinterface "%YELLOW%Hello!%_COLOR%" "\n" "%RED%This is the sample output. How does it look?%_COLOR%" "%MAGENTA%Hopefully ok.%_COLOR%"
-pause > nul
-
-call :updateuserinterface "%RED%Hello!%_COLOR%" "\n" "%MAGENTA%This is the sample output. How does it look?%_COLOR%" "%GREEN%Hopefully ok.%_COLOR%"
-pause > nul
-
-call :updateuserinterface "%MAGENTA%Hello!%_COLOR%" "\n" "%GREEN%This is the sample output. How does it look?%_COLOR%" "%YELLOW%Hopefully ok.%_COLOR%"
-pause > nul
-goto loop
+:: Insert code here ::
+goto END
 
 :: Arguments - <line1> <line2> <line3> ... <lineN>
 :updateuserinterface
