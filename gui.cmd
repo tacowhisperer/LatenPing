@@ -15,13 +15,13 @@ REM Function return variable
 	set _RETURN=
 
 REM Hold the options that are read by the updateuserinterface function 
-	:: Initial window width and height values
-	set /A "WIDTH = 25"
-	set /A "HEIGHT = 5"
-
 	:: Padding values to add to the top and bottom of messages displayed.
-	set /A "PADDING_TB = 0"
-	set /A "PADDING_LR = 0"
+	set /A "PADDING_LR = 3"
+	set /A "PADDING_TB = 1"
+
+	:: Newline character for multiline variable
+	set NL=^
+
 
 	:: ANSI Color Codes
 	set "CYAN=[1;36m"
@@ -31,44 +31,66 @@ REM Hold the options that are read by the updateuserinterface function
 	set "MAGENTA=[1;35m"
 	set "_COLOR=[0m"
 
+:loop
+call :updateuserinterface "%GREEN%Hello!%_COLOR%" "\n" "%YELLOW%This is the sample output. How does it look?%_COLOR%" "%RED%Hopefully ok.%_COLOR%"
+pause > nul
+
+call :updateuserinterface "%YELLOW%Hello!%_COLOR%" "\n" "%RED%This is the sample output. How does it look?%_COLOR%" "%MAGENTA%Hopefully ok.%_COLOR%"
+pause > nul
+
+call :updateuserinterface "%RED%Hello!%_COLOR%" "\n" "%MAGENTA%This is the sample output. How does it look?%_COLOR%" "%GREEN%Hopefully ok.%_COLOR%"
+pause > nul
+
+call :updateuserinterface "%MAGENTA%Hello!%_COLOR%" "\n" "%GREEN%This is the sample output. How does it look?%_COLOR%" "%YELLOW%Hopefully ok.%_COLOR%"
+pause > nul
+goto loop
+
 :: Arguments - <line1> <line2> <line3> ... <lineN>
 :updateuserinterface
-	set "A=%CYAN%Andres%_COLOR%"
-	set "B=%GREEN%Salgado%_COLOR%"
-	set "C=%YELLOW%wrote%_COLOR%"
-	set "D=%RED%this%_COLOR%"
-	set "E=%MAGENTA%batch%_COLOR%"
-	set "F=script."
+	set /A "_windowwidth = 0"
+	set /A "_windowheight = 2"
+	set /A "_col = !PADDING_LR! + 2"
 
-	call :colorstrlen "!A!"
-	set /A "la = !_RETURN!"
-	set /A "lac = !la! + 2"
+	:: Holds the entirety of the message
+	set _msg=
 
-	call :colorstrlen "!B!"
-	set /A "lb = !_RETURN!"
-	set /A "lbc = !lac! + !lb! + 1"
+	:: Loops through each argument given to calculate correct window dimensions for the display
+	:nextline
+		set "_line=%~1"
 
-	call :colorstrlen "!C!"
-	set /A "lc = !_RETURN!"
-	set /A "lcc = !lbc! + !lc! + 1"
+		if "!_line!" neq "" (
+			call :colorstrlen "!_line!"
 
-	call :colorstrlen "!D!"
-	set /A "ld = !_RETURN!"
-	set /A "ldc = !lcc! + !ld! + 1"
+			:: Update the window width to fit the longest line of text
+			if !_windowwidth! lss !_RETURN! set /A "_windowwidth = !_RETURN!"
+			set _RETURN=
 
-	call :colorstrlen "!E!"
-	set /A "le = !_RETURN!"
-	set /A "lec = !ldc! + !le! + 1"
+			:: Update the window height to fit an additional line of text
+			set /A "_windowheight += 1"
 
-	call :colorstrlen "!F!"
-	set /A "lf = !_RETURN!"
-	set /A "lfc = !lec! + !lf!"
+			:: Used for properly aligning each line according to padding
+			set /A "_row = !_windowheight! + !PADDING_TB! - 1"
 
-	echo %A% %B% %C% %D% %E% %F%
-	echo %CYAN%!la!%_COLOR% [2;!lac!H%GREEN%!lb!%_COLOR%[2;!lbc!H%YELLOW%!lc!%_COLOR%[2;!lcc!H%RED%!ld!%_COLOR%[2;!ldc!H%MAGENTA%!le!%_COLOR%[2;!lec!H!lf!
-	pause
+			:: Use the string "\n" as an indicator that an empty line is desired.
+			if /I "!_line!" == "\n" (set "_msg=!_msg!!NL![!_row!;!_col!H") else (set "_msg=!_msg!!NL![!_row!;!_col!H!_line!")
 
-	goto END
+			shift
+			goto nextline
+		)
+
+	:: Account for padding specified by the LR TB variables
+	set /A "_windowwidth = !_windowwidth! + 2 * !PADDING_LR! + 2"
+	set /A "_windowheight = !_windowheight! + 2 * !PADDING_TB!"
+
+	:: Update the window to fit the correct dimensions
+	mode !_windowwidth!,!_windowheight!
+
+	:: Shows the message without the newline character that echo outputs - too slow, using vanilla echo
+	rem <nul set /p x=x!_msg!
+
+	:: Output the message to the newly resized console screen
+	echo [H[2J!_msg!
+	goto :EOF
 
 REM Calculates the length of the string given as an argument
 :: Arguments: string
